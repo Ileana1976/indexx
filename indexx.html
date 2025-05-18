@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ELISA-PAINT</title>
+  <link rel="icon" href="favicon.png" type="image/png" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #intro-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    #intro-screen img {
+      width: 500px;
+      height: auto;
+    }
+
+    .toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 10px;
+      background-color: #333;
+      color: white;
+      z-index: 100;
+      flex-wrap: wrap;
+    }
+
+    .toolbar button,
+    .toolbar input,
+    .toolbar select {
+      margin: 5px;
+      padding: 10px;
+      background-color: #444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .toolbar button:hover,
+    .toolbar input:hover,
+    .toolbar select:hover {
+      background-color: #666;
+    }
+
+    .logo-large {
+      width: 120px;
+      height: auto;
+      margin-right: 50px;
+      transition: width 0.3s;
+    }
+
+    canvas {
+      border: 1px solid #000;
+      cursor: crosshair;
+      margin-top: 70px;
+      display: none;
+      transition: width 0.3s, height 0.3s;
+    }
+
+    .postit {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      background-color: #ffeb3b;
+      border-radius: 10px;
+      box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.2);
+      display: none;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+      cursor: move;
+    }
+
+    .postit textarea {
+      width: 100%;
+      height: 100%;
+      background-color: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-size: 14px;
+      color: #333;
+      padding: 5px;
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      font-size: 16px;
+    }
+
+    .footer .green {
+      color: green;
+      font-weight: bold;
+    }
+
+    .footer .blue {
+      color: blue;
+    }
+
+    @media (max-width: 768px) {
+      .toolbar {
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+
+      .logo-large {
+        width: 100px;
+        margin-bottom: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Intro Screen -->
+  <div id="intro-screen">
+    <img src="logo.jpeg" alt="Logo" />
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar">
+    <img src="logo.jpeg" alt="Logo" class="logo-large" />
+    <input type="color" id="color-picker" value="#ffeb3b" />
+    <button id="eraser">Gumă de șters</button>
+    <button id="clear">Resetare</button>
+    <button id="download">Descarcă PNG</button>
+    <button id="add-postit">Adaugă Post-it</button>
+    <button id="increase-brush">+</button>
+    <button id="decrease-brush">-</button>
+    <select id="font-size">
+      <option value="14">Subțire</option>
+      <option value="24">Gros</option>
+    </select>
+    <input type="file" id="file-upload" accept="image/png, image/jpeg, application/pdf" />
+  </div>
+
+  <canvas id="paint-canvas"></canvas>
+
+  <div id="postit-template" class="postit">
+    <textarea class="postit-text" placeholder="Scrie notițele aici..."></textarea>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span class="green">@2025</span> <span class="blue">- webmaster: Vasile GHINESCU</span>
+  </div>
+
+  <!-- Script -->
+  <script>
+    window.onload = function () {
+      setTimeout(() => {
+        document.getElementById("intro-screen").style.display = "none";
+        document.getElementById("toolbar").style.display = "flex";
+        document.getElementById("paint-canvas").style.display = "block";
+      }, 15000);
+    };
+
+    const canvas = document.getElementById("paint-canvas");
+    const ctx = canvas.getContext("2d");
+    const colorPicker = document.getElementById("color-picker");
+    const eraserButton = document.getElementById("eraser");
+    const clearButton = document.getElementById("clear");
+    const downloadButton = document.getElementById("download");
+    const addPostitButton = document.getElementById("add-postit");
+    const fontSizeSelect = document.getElementById("font-size");
+    const fileUpload = document.getElementById("file-upload");
+    const postitTemplate = document.getElementById("postit-template");
+    const increaseBrushButton = document.getElementById("increase-brush");
+    const decreaseBrushButton = document.getElementById("decrease-brush");
+
+    let painting = false;
+    let eraser = false;
+    let color = "#000000";
+    let uploadedImage = null;
+    let postits = [];
+    let currentFontSize = "14";
+    let brushSize = 5;
+
+    canvas.width = window.innerWidth - 40;
+    canvas.height = window.innerHeight - 150;
+
+    function startPosition(e) {
+      painting = true;
+      draw(e);
+    }
+
+    function endPosition() {
+      painting = false;
+      ctx.beginPath();
+    }
+
+    function draw(e) {
+      if (!painting) return;
+      ctx.lineWidth = brushSize;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = color;
+
+      ctx.globalCompositeOperation = eraser ? "destination-out" : "source-over";
+
+      ctx.lineTo(e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop);
+    }
+
+    clearButton.addEventListener("click", () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (uploadedImage) {
+        ctx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
+      }
+      postits.forEach((p) => p.remove());
+      postits = [];
+    });
+
+    downloadButton.addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = "paint.png";
+      link.click();
+    });
+
+    colorPicker.addEventListener("input", (e) => {
+      color = e.target.value;
+    });
+
+    eraserButton.addEventListener("click", () => {
+      eraser = !eraser;
+      eraserButton.style.backgroundColor = eraser ? "#f44336" : "#444";
+    });
+
+    fileUpload.addEventListener("change", handleFileUpload);
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          const img = new Image();
+          img.onload = function () {
+            uploadedImage = img;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    addPostitButton.addEventListener("click", () => {
+      const newPostit = postitTemplate.cloneNode(true);
+      newPostit.style.display = "block";
+      newPostit.style.left = `${canvas.width / 2 - 100}px`;
+      newPostit.style.top = `${canvas.height / 2 - 100}px`;
+
+      const newTextArea = newPostit.querySelector(".postit-text");
+      newTextArea.style.fontSize = `${currentFontSize}px`;
+
+      newPostit.addEventListener("mousedown", (e) => {
+        let startX = e.clientX - newPostit.offsetLeft;
+        let startY = e.clientY - newPostit.offsetTop;
+
+        const movePostit = (moveEvent) => {
+          newPostit.style.left = `${moveEvent.clientX - startX}px`;
+          newPostit.style.top = `${moveEvent.clientY - startY}px`;
+        };
+
+        const stopMovePostit = () => {
+          document.removeEventListener("mousemove", movePostit);
+          document.removeEventListener("mouseup", stopMovePostit);
+        };
+
+        document.addEventListener("mousemove", movePostit);
+        document.addEventListener("mouseup", stopMovePostit);
+      });
+
+      postits.push(newPostit);
+      document.body.appendChild(newPostit);
+    });
+
+    fontSizeSelect.addEventListener("change", (e) => {
+      currentFontSize = e.target.value;
+      postits.forEach((p) => {
+        const textArea = p.querySelector(".postit-text");
+        textArea.style.fontSize = `${currentFontSize}px`;
+      });
+    });
+
+    increaseBrushButton.addEventListener("click", () => {
+      brushSize = Math.min(brushSize + 1, 30);
+    });
+
+    decreaseBrushButton.addEventListener("click", () => {
+      brushSize = Math.max(brushSize - 1, 1);
+    });
+
+    canvas.addEventListener("mousedown", startPosition);
+    canvas.addEventListener("mouseup", endPosition);
+    canvas.addEventListener("mousemove", draw);
+  </script>
+</body>
+</html>
